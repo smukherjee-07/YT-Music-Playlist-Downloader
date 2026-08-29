@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment variables / secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE / editors
+.vscode/
+.idea/
+
+# Python tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Build / distribution
+build/
+dist/
+*.egg-info/
+
+# Local configuration
+.config/
+config.json
+
+# Downloaded music / media
+DownloadedMusic/
+downloads/
+*.mp3
+*.m4a
+*.webm
+*.wav
+*.flac
+*.part
+*.ytdl
+
+# Temporary files
+*.tmp
+*.temp
