@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🎵 YT Music Downloader
+# 🎵 YT Music Playlist Downloader
 
 **A fast, simple command-line tool for downloading tracks and playlists from YouTube & YouTube Music as MP3 files.**
 
@@ -62,8 +62,8 @@
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/YT-Music-Downloader.git
-cd YT-Music-Downloader
+git clone https://github.com/YOUR_USERNAME/YT-Music-Playlist-Downloader.git
+cd YT-Music-Playlist-Downloader
 ```
 
 ### 2. Install Python Dependencies
