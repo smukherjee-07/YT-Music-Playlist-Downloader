@@ -284,7 +284,7 @@ Music/
 ## 🗂️ Project Structure
 
 ```text
-YT-Music-Downloader/
+YT-Music-Playlist-Downloader/
 ├── main.py
 ├── requirements.txt
 ├── README.md
