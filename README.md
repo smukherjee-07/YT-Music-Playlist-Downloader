@@ -43,7 +43,7 @@
 - 💾 Remembers your last download location between sessions
 - 🖥️ Simple, interactive command-line menu — no complex flags to remember
 - 🌍 Cross-platform: Windows, Linux, and macOS
-
+- 🔃 Playlist tracks can be downloaded concurrently using 3 or 4 download workers, reducing the total download time while preserving the original playlist order in the filenames.
 ---
 
 ## 📋 Requirements
