@@ -62,7 +62,7 @@
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/YT-Music-Playlist-Downloader.git
+git clone https://github.com/smukherjee-07/YT-Music-Playlist-Downloader.git
 cd YT-Music-Playlist-Downloader
 ```
 
