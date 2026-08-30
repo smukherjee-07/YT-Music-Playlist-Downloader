@@ -292,6 +292,20 @@ YT-Music-Playlist-Downloader/
 └── .gitignore
 ```
 
+## 🔄️ Concurrent playlist track downloads
+
+```text
+Playlist
+   │
+   ├── Track 1 ──┐
+   ├── Track 2 ──┤
+   ├── Track 3 ──┤ → concurrent downloads
+   ├── Track 4 ──┤
+   └── ...       │
+                 ↓
+          ordered filenames
+```
+
 ---
 
 ## ⚙️ Configuration
