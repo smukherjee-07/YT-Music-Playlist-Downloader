@@ -4,7 +4,7 @@ import shutil
 import sys
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from threading import Lock
+
 import yt_dlp
 from rich.console import Console
 from rich.panel import Panel
@@ -287,7 +287,9 @@ def build_options(output_template: str, audio_quality: str, hook) -> dict:
         "quiet": True,
         "no_warnings": True,
         "continuedl": True,
-        "retries": 3,
+        "retries": 10,
+        "fragment_retries": 10,
+        "socket_timeout": 30,
     }
 
 
@@ -312,7 +314,7 @@ def download_single_track(
 ) -> bool:
     """Download one track directly into the selected folder."""
     title = info.get("title") or "Unknown Track"
-    url = info.get("webpage_url") or info.get("url")
+    url = make_entry_url(info)
 
     if not url:
         console.print("[bold red]No downloadable URL found.[/]")
@@ -323,12 +325,13 @@ def download_single_track(
     )
 
     with Progress(
-        TextColumn("[bold cyan]{task.description}"),
+        TextColumn("{task.description}"),
         BarColumn(),
         "[progress.percentage]{task.percentage:>3.0f}%",
         DownloadColumn(),
         TransferSpeedColumn(),
         TimeRemainingColumn(),
+        refresh_per_second=8,
     ) as progress:
         task_id = progress.add_task(title, total=1, completed=0)
 
@@ -393,12 +396,6 @@ def download_playlist_entry(
     entry_url = make_entry_url(entry)
 
     if not entry_url:
-        progress.update(
-            task_id,
-            description=f"[{index:02d}/{total_tracks:02d}] {title} ✗",
-            total=1,
-            completed=1,
-        )
         return False
 
     output_template = str(
@@ -444,24 +441,10 @@ def download_playlist_entry(
         if result != 0:
             raise RuntimeError("yt-dlp reported a download failure")
 
-        task = progress.tasks[task_id]
-        progress.update(
-            task_id,
-            description=(
-                f"[{index:02d}/{total_tracks:02d}] {title} ✓"
-            ),
-            total=task.total or 1,
-            completed=task.total or 1,
-        )
         return True
 
     except Exception as error:
-        progress.update(
-            task_id,
-            description=(
-                f"[{index:02d}/{total_tracks:02d}] {title} ✗"
-            ),
-        )
+        
         console.print(
             f"\n[bold red]Track {index:02d} failed:[/] {title}"
         )
@@ -496,8 +479,18 @@ def download_playlist(
         console.print("[yellow]No downloadable tracks found.[/]")
         return
 
-    stats = {"downloaded": 0, "failed": 0}
-    stats_lock = Lock()
+    stats = {
+    "downloaded": 0,
+    "failed": 0,
+}
+
+    failed_tracks = []
+
+    worker_count = min(
+        max(1, concurrent_downloads),
+        MAX_CONCURRENT_DOWNLOADS,
+        total_tracks,
+    )
 
     with Progress(
         TextColumn("{task.description}"),
@@ -507,30 +500,52 @@ def download_playlist(
         TransferSpeedColumn(),
         TimeRemainingColumn(),
         refresh_per_second=8,
+        transient=True,
     ) as progress:
-        task_ids = {}
+        task_ids = []
 
-        for index, entry in enumerate(entries, start=1):
-            title = entry.get("title") or "Preparing..."
-            task_ids[index] = progress.add_task(
-                f"[{index:02d}/{total_tracks:02d}] {title}",
-                total=1,
-                completed=0,
+        active_count = min(
+            worker_count,
+            total_tracks
+        )
+
+        for _ in range(active_count):
+            task_ids.append(
+                progress.add_task(
+                    "Preparing...",
+                    total=0
+                )
             )
+
+        
 
         console.print(
             f"[bold cyan]Downloading:[/] {total_tracks} track(s)"
         )
 
-        worker_count = min(
-            max(1, concurrent_downloads),
-            MAX_CONCURRENT_DOWNLOADS,
-            total_tracks,
-        )
+        with ThreadPoolExecutor(
+            max_workers=worker_count
+        ) as executor:
 
-        with ThreadPoolExecutor(max_workers=worker_count) as executor:
-            futures = {
-                executor.submit(
+            futures = {}
+
+            # Start the first batch
+            for slot in range(active_count):
+
+                index = slot + 1
+                entry = entries[index - 1]
+
+                progress.update(
+                    task_ids[slot],
+                    description=(
+                        f"[{index:02d}/{total_tracks:02d}] "
+                        f"{entry.get('title') or 'Preparing...'}"
+                    ),
+                    total=0,
+                    completed=0,
+                )
+
+                future = executor.submit(
                     download_playlist_entry,
                     entry,
                     index,
@@ -538,10 +553,81 @@ def download_playlist(
                     playlist_directory,
                     audio_quality,
                     progress,
-                    task_ids[index],
-                ): index
-                for index, entry in enumerate(entries, start=1)
-            }
+                    task_ids[slot],
+                )
+
+                futures[future] = (index, slot)
+
+            next_index = active_count + 1
+
+            while futures:
+
+                completed_future = next(
+                    as_completed(futures)
+                )
+
+                index, slot = futures.pop(
+                    completed_future
+                )
+
+                try:
+                    success = completed_future.result()
+
+                except Exception as error:
+                    success = False
+
+                    console.print(
+                        f"\n[bold red]"
+                        f"Track {index:02d} worker error:"
+                        f"[/] {error}"
+                    )
+
+                if success:
+                    stats["downloaded"] += 1
+
+                else:
+                    stats["failed"] += 1
+
+                    failed_tracks.append(
+                        (
+                            index,
+                            entries[index - 1].get("title")
+                            or "Unknown Track"
+                        )
+                    )
+
+                # Reuse the same progress row
+                if next_index <= total_tracks:
+
+                    next_entry = entries[next_index - 1]
+
+                    progress.update(
+                        task_ids[slot],
+                        description=(
+                            f"[{next_index:02d}/{total_tracks:02d}] "
+                            f"{next_entry.get('title') or 'Preparing...'}"
+                        ),
+                        total=0,
+                        completed=0,
+                    )
+
+                    future = executor.submit(
+                        download_playlist_entry,
+                        next_entry,
+                        next_index,
+                        total_tracks,
+                        playlist_directory,
+                        audio_quality,
+                        progress,
+                        task_ids[slot],
+                    )
+
+                    futures[future] = (
+                        next_index,
+                        slot
+                    )
+
+                    next_index += 1
 
             # Completion order is deliberately ignored for playlist order.
             # The fixed index in each filename preserves the original order.
@@ -556,7 +642,6 @@ def download_playlist(
                         f"\n[bold red]Track {index:02d} worker error:[/] {error}"
                     )
 
-                with stats_lock:
                     if success:
                         stats["downloaded"] += 1
                     else:
